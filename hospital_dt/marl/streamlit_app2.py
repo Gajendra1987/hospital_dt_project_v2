@@ -112,6 +112,20 @@ def run_resilience_test(ppo_model, current_surge_factor):
 
     return surge_levels, ppo_waits, baseline_waits
 
+# Add XAI by visualizing PPO Action Probabilities
+def get_action_explanation(ppo_model, state):
+    s_tensor = torch.from_numpy(state).float()
+    with torch.no_grad():
+        probs = ppo_model.actor(s_tensor).numpy() # Get raw probabilities
+    
+    # Explainability Data
+    explanation = {
+        "Admit Probability": probs[0],
+        "Defer Probability": probs[1],
+        "Primary Factor": "Occupancy" if state[0] > 5 else "Arrival Trend"
+    }
+    return explanation
+
 # --- UPDATED TABS ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Baseline Simulation Output",
@@ -491,3 +505,4 @@ if st.sidebar.button("📊 Generate Resilience Chart"):
         st.success("Analysis Complete: PPO maintains stability for +35% more surge than the baseline.")
     else:
         st.error("Cannot run analysis without a trained model file.")
+
