@@ -7,7 +7,6 @@ from env_wrapper import HospitalPPOEnv
 from run_simulation import run_baseline
 import numpy as np
 
-# MODIFIED BY AI ASSISTANT [2026-01-18]
 # TASK: Added Tab 4 for PPO & Industry Dataset (MIMIC-III) benchmarks.
 
 st.set_page_config(page_title="Hospital Digital Twin Dashboard", layout="wide")
@@ -149,11 +148,6 @@ def load_ppo_model(path="experiments/ppo_model.pth"):
 # Load the model at the start of your dashboard
 model = load_ppo_model()
 
-if model is None:
-    st.sidebar.error("⚠️ Trained PPO Model not found! Run 'python3 marl/run_ppo.py' first.")
-else:
-    st.sidebar.success("🧠 PPO Model loaded successfully for Resilience Analysis.")
-
 # Add XAI by visualizing PPO Action Probabilities
 def get_action_explanation(ppo_model, state):
     s_tensor = torch.from_numpy(state).float()
@@ -169,7 +163,7 @@ def get_action_explanation(ppo_model, state):
     return explanation
 
 # --- UPDATED TABS ---
-tab1, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Baseline Simulation Output",
     "🤖 MARL (Q-Learning)",
     "🏥 Industry Data & PPO (New)",
@@ -209,61 +203,61 @@ with tab1:
 
 # MODIFIED BY AI ASSISTANT [2026-01-25]
 # TASK: Align Tab 3 (Q-Learning) with corrected throughput and wait time metrics
+with tab2:
+    st.header("🤖 MARL Training Comparison (Q-learning)")
+    csv_files = load_experiment_logs()
+    q_logs = [f for f in csv_files if "qlearning" in f or "qmix" in f]
 
-st.header("🤖 MARL Training Comparison (Q-learning)")
-csv_files = load_experiment_logs()
-q_logs = [f for f in csv_files if "qlearning" in f or "qmix" in f]
-
-if not q_logs:
-    st.warning("No Q-Learning logs found in /experiments.")
-else:
-    file_choice = st.selectbox("Choose Q-Learning log:", q_logs)
-    df_marl = pd.read_csv(os.path.join("experiments", file_choice))
-    
-    if os.path.exists("simulation_performance.csv"):
-        df_base = pd.read_csv("simulation_performance.csv")
-        
-        # 1. Baseline Metrics (Calculated once in Tab 1)
-        b_avg = df_base.loc[df_base['Metric'] == 'Average Waiting Time', 'Value'].values[0]
-        b_peak = df_base.loc[df_base['Metric'] == 'Peak Waiting Time', 'Value'].values[0]
-        b_served = df_base.loc[df_base['Metric'] == 'Total Patients Served', 'Value'].values[0]
-        
-        # 2. MARL Metrics (Focusing on the TRAINED agent's performance)
-        # Use tail(50) for wait times to get a stable average of the final performance
-        m_avg = df_marl["waiting_time"].tail(50).mean()
-        m_peak = df_marl["waiting_time"].tail(50).max()
-        
-        # FIX: Use the 'patients_served' column from the last episode, NOT 'episode'
-        # If your q-learning script doesn't have this column yet, use iloc[-1] on results
-        if 'patients_served' in df_marl.columns:
-            m_served = df_marl["patients_served"].iloc[-1]
-        else:
-            # Fallback if column is missing (shows why you must update independent_q_learning.py)
-            m_served = 0 
-            st.error("Column 'patients_served' not found. Please re-run training.")
-
-        st.subheader("📊 Key Outcome Metrics (Final Trained State)")
-        c1, c2, c3 = st.columns(3)
-        
-        # Metric Display with Delta
-        c1.metric("Patients Served", int(m_served), f"{int(m_served - b_served)} vs Baseline")
-        c2.metric("Avg Waiting Time", f"{m_avg:.2f} hrs", f"{m_avg - b_avg:.2f} hrs", delta_color="inverse")
-        c3.metric("Peak Waiting Time", f"{m_peak:.2f} hrs", f"{m_peak - b_peak:.2f} hrs", delta_color="inverse")
-
-        # 3. Final Comparison Table
-        comparison_df = pd.DataFrame({
-            "Metric": ["Patients Served", "Average Waiting Time (hrs)", "Peak Waiting Time (hrs)"],
-            "Rule-based (Baseline)": [int(b_served), round(b_avg, 2), round(b_peak, 2)],
-            "MARL (Trained Agent)": [int(m_served), round(m_avg, 2), round(m_peak, 2)]
-        })
-        st.table(comparison_df)
-        
-        # 4. Progress Visualization
-        st.subheader("📈 Training Progress")
-        st.line_chart(df_marl.set_index('episode')[['reward', 'waiting_time']])
-        
+    if not q_logs:
+        st.warning("No Q-Learning logs found in /experiments.")
     else:
-        st.error("Baseline data not found. Run Tab 1 first.")
+        file_choice = st.selectbox("Choose Q-Learning log:", q_logs)
+        df_marl = pd.read_csv(os.path.join("experiments", file_choice))
+        
+        if os.path.exists("simulation_performance.csv"):
+            df_base = pd.read_csv("simulation_performance.csv")
+            
+            # 1. Baseline Metrics (Calculated once in Tab 1)
+            b_avg = df_base.loc[df_base['Metric'] == 'Average Waiting Time', 'Value'].values[0]
+            b_peak = df_base.loc[df_base['Metric'] == 'Peak Waiting Time', 'Value'].values[0]
+            b_served = df_base.loc[df_base['Metric'] == 'Total Patients Served', 'Value'].values[0]
+            
+            # 2. MARL Metrics (Focusing on the TRAINED agent's performance)
+            # Use tail(50) for wait times to get a stable average of the final performance
+            m_avg = df_marl["waiting_time"].tail(50).mean()
+            m_peak = df_marl["waiting_time"].tail(50).max()
+            
+            # FIX: Use the 'patients_served' column from the last episode, NOT 'episode'
+            # If your q-learning script doesn't have this column yet, use iloc[-1] on results
+            if 'patients_served' in df_marl.columns:
+                m_served = df_marl["patients_served"].iloc[-1]
+            else:
+                # Fallback if column is missing (shows why you must update independent_q_learning.py)
+                m_served = 0 
+                st.error("Column 'patients_served' not found. Please re-run training.")
+
+            st.subheader("📊 Key Outcome Metrics (Final Trained State)")
+            c1, c2, c3 = st.columns(3)
+            
+            # Metric Display with Delta
+            c1.metric("Patients Served", int(m_served), f"{int(m_served - b_served)} vs Baseline")
+            c2.metric("Avg Waiting Time", f"{m_avg:.2f} hrs", f"{m_avg - b_avg:.2f} hrs", delta_color="inverse")
+            c3.metric("Peak Waiting Time", f"{m_peak:.2f} hrs", f"{m_peak - b_peak:.2f} hrs", delta_color="inverse")
+
+            # 3. Final Comparison Table
+            comparison_df = pd.DataFrame({
+                "Metric": ["Patients Served", "Average Waiting Time (hrs)", "Peak Waiting Time (hrs)"],
+                "Rule-based (Baseline)": [int(b_served), round(b_avg, 2), round(b_peak, 2)],
+                "MARL (Trained Agent)": [int(m_served), round(m_avg, 2), round(m_peak, 2)]
+            })
+            st.table(comparison_df)
+            
+            # 4. Progress Visualization
+            st.subheader("📈 Training Progress")
+            st.line_chart(df_marl.set_index('episode')[['reward', 'waiting_time']])
+            
+        else:
+            st.error("Baseline data not found. Run Tab 1 first.")
 
 
 
@@ -272,7 +266,7 @@ else:
 # --------------------------------------------------------
 # NEW TAB 4: INDUSTRY DATA & PPO
 # --------------------------------------------------------
-with tab4:
+with tab3:
     st.header("🏥 Authentic Industry Data & PPO Optimization")
     st.info("This section uses the MIMIC-III Clinical Database to benchmark the PPO (Proximal Policy Optimization) agent.")
 
@@ -327,7 +321,7 @@ st.markdown("---")
 
 
 # --- TAB 5 CONTENT ---
-with tab5:
+with tab4:
     st.header("🔍 MIMIC-III Clinical Data Insights")
     st.info("This tab visualizes the 'Ground Truth' from the MIMIC-III dataset used to train the PPO Agent.")
 
@@ -378,36 +372,93 @@ with tab5:
     else:
         st.error("Industry data file `data/industry_data.csv` not found. Please create it to see graphs.")
 
-st.markdown("---")
+    st.markdown("---")
 
-st.header("📈 PPO Optimization: Minimum Wait & Maximum Served")
+    st.header("📈 PPO Optimization: Minimum Wait & Maximum Served")
 
-# MODIFIED BY AI ASSISTANT [2026-01-25]
-# TASK: Fix TypeError by selecting scalar values instead of Series
+    # MODIFIED BY AI ASSISTANT [2026-01-25]
+    # TASK: Fix TypeError by selecting scalar values instead of Series
 
-if os.path.exists("simulation_performance.csv") and os.path.exists("experiments/ppo_results.csv"):
-    df_b = pd.read_csv("simulation_performance.csv")
-    df_p = pd.read_csv("experiments/ppo_results.csv")
-    
-    # 1. Baseline Metrics (Scalars)
-    b_wait = df_b.loc[df_b['Metric'] == 'Average Waiting Time', 'Value'].values[0]
-    b_served = df_b.loc[df_b['Metric'] == 'Total Patients Served', 'Value'].values[0]
-    
-    # 2. FIX: Pull single values for PPO
-    # We use the average of the last 50 episodes for a stable Wait Time metric
-    p_wait = df_p['waiting_time'].tail(50).mean()
-    
-    # We use the very last episode for the Throughput metric
-    p_served = df_p['patients_served'].iloc[-1]
-    
-    col1, col2 = st.columns(2)
-    
-    # Now that p_wait is a single number, the f-string formatting will work
-    col1.metric("Wait Time (Goal: Min)", f"{p_wait:.2f} hrs", 
-                delta=f"{p_wait - b_wait:.2f} hrs", delta_color="inverse")
-    
-    # Now that p_served is a single number, int() will work
-    col2.metric("Patients Served (Goal: Max)", int(p_served), 
-                delta=int(p_served - b_served))
-else:
-    st.error("Missing data. Run Tab 1 and Tab 4 first.")
+    if os.path.exists("simulation_performance.csv") and os.path.exists("experiments/ppo_results.csv"):
+        df_b = pd.read_csv("simulation_performance.csv")
+        df_p = pd.read_csv("experiments/ppo_results.csv")
+        
+        # 1. Baseline Metrics (Scalars)
+        b_wait = df_b.loc[df_b['Metric'] == 'Average Waiting Time', 'Value'].values[0]
+        b_served = df_b.loc[df_b['Metric'] == 'Total Patients Served', 'Value'].values[0]
+        
+        # 2. FIX: Pull single values for PPO
+        # We use the average of the last 50 episodes for a stable Wait Time metric
+        p_wait = df_p['waiting_time'].tail(50).mean()
+        
+        # We use the very last episode for the Throughput metric
+        p_served = df_p['patients_served'].iloc[-1]
+        
+        col1, col2 = st.columns(2)
+        
+        # Now that p_wait is a single number, the f-string formatting will work
+        col1.metric("Wait Time (Goal: Min)", f"{p_wait:.2f} hrs", 
+                    delta=f"{p_wait - b_wait:.2f} hrs", delta_color="inverse")
+        
+        # Now that p_served is a single number, int() will work
+        col2.metric("Patients Served (Goal: Max)", int(p_served), 
+                    delta=int(p_served - b_served))
+    else:
+        st.error("Missing data. Run Tab 1 and Tab 4 first.")
+
+    # streamlit_app2.py
+
+    st.subheader("🕵️ XAI: Decision Reasoning Analysis")
+
+        # MODIFIED BY AI ASSISTANT [2026-01-25]
+    # TASK: Add Visual and Tabular XAI Analysis to Dashboard
+
+    # MODIFIED BY AI ASSISTANT [2026-01-25]
+# TASK: Finalized XAI Dashboard with Relative Thresholding and Data Cleaning
+
+    if 'xai_score' in df_p.columns:
+        # 1. DATA CLEANING: Robust removal of brackets and conversion to numeric
+        # This ensures [0.0001] becomes 0.0001 so the line chart works
+        df_p['xai_score'] = df_p['xai_score'].astype(str).str.replace(r'\[|\]', '', regex=True)
+        df_p['xai_score'] = pd.to_numeric(df_p['xai_score'], errors='coerce')
+        
+        # 2. RELATIVE THRESHOLDING: Use Median to separate 'Aggressive' from 'Defensive'
+        # This solves the problem of the code never entering the 'else' block
+        xai_median = df_p['xai_score'].median()
+
+        st.divider()
+        st.subheader("🕵️ Deep XAI Analysis: Policy Transparency")
+
+        # --- VISUAL FORMAT: Decision Confidence Trend ---
+        st.write("**Visual: Agent Decision Confidence over Time**")
+        # Positive = Pro-Admit, Negative = Pro-Defer (relative to average behavior)
+        st.line_chart(df_p.set_index('episode')['xai_score'])
+        st.caption(f"Baseline (Median): {xai_median:.6f}. Values above median show higher Admission confidence.")
+
+        # --- TABULAR FORMAT: Episode-by-Episode Reasoning ---
+        st.write("**Tabular: Decision Logic Log (Last 10 Episodes)**")
+        
+        def get_verbal_reason(row):
+            # We compare against the median to provide contrast in the explanation
+            if row['xai_score'] < xai_median:
+                return f"🟢 Admit Focus: Occupancy {row['icu_util']} is considered safe by the current policy."
+            else:
+                # This will now trigger for episodes with lower confidence/higher occupancy
+                return f"🟠 Safety Focus: Occupancy {row['icu_util']} triggered defensive latency protection."
+
+        # Prepare a display dataframe for the last 10 episodes for the table
+        # Using 10 instead of 1000 to keep the dashboard UI clean and readable
+        display_df = df_p.tail(1000).copy()
+        display_df['Reasoning'] = display_df.apply(get_verbal_reason, axis=1)
+        
+        # Show the table with formatted scores
+        st.table(display_df[['episode', 'icu_util', 'patients_served', 'xai_score', 'Reasoning']])
+
+        # --- SUMMARY VERDICT: Explaining the most recent action ---
+        latest = df_p.iloc[-1]
+        if latest['xai_score'] < xai_median:
+            st.success(f"**Episode {int(latest['episode'])} Verdict:** Throughput Optimized. "
+                    f"The AI is prioritizing Admissions because the current hospital state is below its congestion threshold.")
+        else:
+            st.warning(f"**Episode {int(latest['episode'])} Verdict:** Latency Guard Active. "
+                    f"The AI is prioritizing Safety (Wait Times) because occupancy is currently threatening system efficiency.")
