@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from PIL import Image
 from env_wrapper import HospitalPPOEnv
+from run_simulation import run_baseline
 import numpy as np
 
 # MODIFIED BY AI ASSISTANT [2026-01-18]
@@ -40,6 +41,71 @@ def compute_baseline_vs_marl_metrics(df):
         "baseline_ot_util": baseline_ot_util,
         "marl_ot_util": marl_ot_util
     }
+
+import pandas as pd
+
+# MODIFIED BY AI ASSISTANT [2026-01-25]
+# TASK: Replace hardcoding with real simulation data from both agents
+
+def compute_baseline_vs_marl_metrics(dt_baseline, dt_marl):
+    def get_real_stats(dt_obj):
+        # Using attributes from your hospital_env.py
+        waits = []
+        for p in dt_obj.patients:
+            adm = p.entered_icu if p.entered_icu is not None else p.entered_ot
+            if adm is not None:
+                waits.append(adm - p.arrival)
+        
+        served = len(waits)
+        return {
+            "served": served,
+            "avg": sum(waits) / served if served > 0 else 0,
+            "peak": max(waits) if served > 0 else 0,
+            "icu": dt_obj._icu_occupancy() / dt_obj.icu_capacity,
+            "ot": dt_obj._ot_occupancy() / dt_obj.ot_capacity
+        }
+
+    b = get_real_stats(dt_baseline)
+    m = get_real_stats(dt_marl)
+
+    return {
+        "baseline_patients": b["served"], "marl_patients": m["served"],
+        "baseline_avg_wait": b["avg"], "marl_avg_wait": m["avg"],
+        "baseline_peak_wait": b["peak"], "marl_peak_wait": m["peak"],
+        "baseline_icu_util": b["icu"], "marl_icu_util": m["icu"],
+        "baseline_ot_util": b["ot"], "marl_ot_util": m["ot"]
+    }
+
+# MODIFIED BY AI ASSISTANT [2026-01-25]
+# TASK: Calculate key performance indicators (KPIs) and save to CSV
+
+def get_simulation_metrics(dt):
+    # 'p.patients' is the correct list in your hospital_env.py
+    # 'p.arrival' is the correct attribute for arrival time
+    
+    wait_times = []
+    for p in dt.patients:
+        # A patient is 'admitted' if they entered ICU or OT
+        admission_time = p.entered_icu if p.entered_icu is not None else p.entered_ot
+        
+        if admission_time is not None:
+            wait_times.append(admission_time - p.arrival)
+    
+    if not wait_times:
+        return 0, 0, 0
+    
+    avg_wait = sum(wait_times) / len(wait_times)
+    peak_wait = max(wait_times)
+    total_served = len(wait_times)
+    
+    # Save to CSV
+    pd.DataFrame([{
+        "Average Waiting Time": round(avg_wait, 2),
+        "Peak Waiting Time": round(peak_wait, 2),
+        "Total Patients Served": total_served
+    }]).to_csv("simulation_kpis.csv", index=False)
+    
+    return avg_wait, peak_wait, total_served
 
 def load_baseline_plot():
     possible_paths = ["hospital_dt_baseline_plot_v2.png", os.path.join(os.getcwd(), "hospital_dt_baseline_plot_v2.png")]
@@ -87,30 +153,6 @@ if model is None:
     st.sidebar.error("⚠️ Trained PPO Model not found! Run 'python3 marl/run_ppo.py' first.")
 else:
     st.sidebar.success("🧠 PPO Model loaded successfully for Resilience Analysis.")
-# TASK: Side-by-Side Resilience Chart (PPO vs Baseline)
-def run_resilience_test(ppo_model, current_surge_factor):
-    surge_levels = np.linspace(1.0, current_surge_factor, num=5)
-    ppo_waits = []
-    baseline_waits = []
-
-    for surge in surge_levels:
-        factor = 1 + (surge / 100)
-        env = HospitalPPOEnv(surge_factor=factor)
-        
-        # Test Baseline
-        s = env.reset()
-        _, _, _, _ = env.step(env.get_baseline_action(s))
-        baseline_waits.append(env.state * 1.5) # Scaled for visualization
-
-        # Test PPO
-        s_tensor = torch.from_numpy(env.reset()).float()
-        with torch.no_grad():
-            probs = ppo_model.actor(s_tensor)
-            action = torch.argmax(probs).item()
-        env.step(action)
-        ppo_waits.append(env.state)
-
-    return surge_levels, ppo_waits, baseline_waits
 
 # Add XAI by visualizing PPO Action Probabilities
 def get_action_explanation(ppo_model, state):
@@ -127,9 +169,8 @@ def get_action_explanation(ppo_model, state):
     return explanation
 
 # --- UPDATED TABS ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab3, tab4, tab5 = st.tabs([
     "📊 Baseline Simulation Output",
-    "📈 Live Charts & Metrics",
     "🤖 MARL (Q-Learning)",
     "🏥 Industry Data & PPO (New)",
     "🔍 MIMIC-III Insights"
@@ -138,229 +179,91 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # --------------------------------------------------------
 # TAB 1 CONTENT
 # --------------------------------------------------------
+# Streamlit Dashboard Integration
 with tab1:
-    st.header("📊 Baseline Simulation Plot")
-
-    plot_path = load_baseline_plot()
-
-    if plot_path:
-        img = Image.open(plot_path)
-        st.image(img, caption="ICU/OT Utilization Plot", use_column_width=True)
-    else:
-        st.warning("No baseline plot found. Run the simulation first:")
-        st.code("python -m hospital_dt.sim.run_simulation")
-
-    st.markdown("---")
-    st.subheader("📁 Instructions")
-    st.markdown("""
-    - Run baseline simulation:  
-      `python -m hospital_dt.sim.run_simulation`
-    - A PNG file will be generated in the root folder  
-    - The dashboard auto-detects the file
-    """)
-
-
-# --------------------------------------------------------
-# TAB 2 CONTENT: LIVE METRICS
-# --------------------------------------------------------
-with tab2:
-    st.header("📈 Interactive Charts – Live Metrics")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("Choose Metric to Display")
-        metric = st.selectbox(
-            "Select:",
-            ["ICU Utilization", "OT Utilization", "Waiting Time Distribution", "Staff Workload"]
-        )
-
-    with col2:
-        st.subheader("Auto Refresh")
-        refresh = st.checkbox("Refresh every run")
-
-    # Dummy example charts (replace later with real logs)
-    # Chart 1
-    fig, ax = plt.subplots(figsize=(6, 3))
-    if metric == "ICU Utilization":
-        ax.plot([60, 72, 80, 65, 90])
-        ax.set_title("ICU Utilization (%)")
-    elif metric == "OT Utilization":
-        ax.plot([40, 55, 70, 65, 50])
-        ax.set_title("OT Utilization (%)")
-    elif metric == "Waiting Time Distribution":
-        ax.hist([10, 12, 8, 30, 5, 7, 20])
-        ax.set_title("Patient Waiting Time (minutes)")
-    elif metric == "Staff Workload":
-        ax.bar(["Dr A", "Dr B", "Nurse1", "Nurse2"], [60, 75, 80, 50])
-        ax.set_ylim(0, 100)
-        ax.set_title("Staff Workload (%)")
-
-    st.pyplot(fig)
-
-    st.markdown("👉 Replace dummy values with real simulation logs to make charts live.")
-
-
-
-with tab3:
-    st.header("🤖 MARL Training Comparison (Q-learning)")
-    csv_files = load_experiment_logs()
-    # Filter for standard Q-learning logs only
-    q_logs = [f for f in csv_files if "qlearning" in f or "qmix" in f]
+    st.header("🏥 Baseline Simulation Performance")
     
-    if not q_logs:
-        st.warning("No Q-Learning logs found. Ensure qlearning_results.csv exists in /experiments.")
-    else:
-        file_choice = st.selectbox("Choose Q-Learning log:", q_logs)
-        df = pd.read_csv(os.path.join("experiments", file_choice))
-        metrics = compute_baseline_vs_marl_metrics(df)
-       
-        st.subheader("📊 Key Outcome Metrics")
+    # Run the simulation
+    dt = run_baseline() 
+    avg_wait, peak_wait, total_served = get_simulation_metrics(dt)
+    
+    # Displaying Metrics in Tab 1
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric(label="Total Patients Served", value=total_served)
+        
+    with col2:
+        # Rendering as hours/minutes for better readability
+        st.metric(label="Average Waiting Time", value=f"{avg_wait:.2f} hrs")
+        
+    with col3:
+        st.metric(label="Peak Waiting Time", value=f"{peak_wait:.2f} hrs", delta="High Demand", delta_color="inverse")
 
+    # Display the existing occupancy plot
+    st.image('hospital_dt_baseline_plot_v2.png', caption="Baseline Resource Utilization")
+
+
+# MODIFIED BY AI ASSISTANT [2026-01-25]
+# TASK: Fix Tab 3 to correctly compare Baseline CSV with Training Log CSV
+
+# MODIFIED BY AI ASSISTANT [2026-01-25]
+# TASK: Align Tab 3 (Q-Learning) with corrected throughput and wait time metrics
+
+st.header("🤖 MARL Training Comparison (Q-learning)")
+csv_files = load_experiment_logs()
+q_logs = [f for f in csv_files if "qlearning" in f or "qmix" in f]
+
+if not q_logs:
+    st.warning("No Q-Learning logs found in /experiments.")
+else:
+    file_choice = st.selectbox("Choose Q-Learning log:", q_logs)
+    df_marl = pd.read_csv(os.path.join("experiments", file_choice))
+    
+    if os.path.exists("simulation_performance.csv"):
+        df_base = pd.read_csv("simulation_performance.csv")
+        
+        # 1. Baseline Metrics (Calculated once in Tab 1)
+        b_avg = df_base.loc[df_base['Metric'] == 'Average Waiting Time', 'Value'].values[0]
+        b_peak = df_base.loc[df_base['Metric'] == 'Peak Waiting Time', 'Value'].values[0]
+        b_served = df_base.loc[df_base['Metric'] == 'Total Patients Served', 'Value'].values[0]
+        
+        # 2. MARL Metrics (Focusing on the TRAINED agent's performance)
+        # Use tail(50) for wait times to get a stable average of the final performance
+        m_avg = df_marl["waiting_time"].tail(50).mean()
+        m_peak = df_marl["waiting_time"].tail(50).max()
+        
+        # FIX: Use the 'patients_served' column from the last episode, NOT 'episode'
+        # If your q-learning script doesn't have this column yet, use iloc[-1] on results
+        if 'patients_served' in df_marl.columns:
+            m_served = df_marl["patients_served"].iloc[-1]
+        else:
+            # Fallback if column is missing (shows why you must update independent_q_learning.py)
+            m_served = 0 
+            st.error("Column 'patients_served' not found. Please re-run training.")
+
+        st.subheader("📊 Key Outcome Metrics (Final Trained State)")
         c1, c2, c3 = st.columns(3)
+        
+        # Metric Display with Delta
+        c1.metric("Patients Served", int(m_served), f"{int(m_served - b_served)} vs Baseline")
+        c2.metric("Avg Waiting Time", f"{m_avg:.2f} hrs", f"{m_avg - b_avg:.2f} hrs", delta_color="inverse")
+        c3.metric("Peak Waiting Time", f"{m_peak:.2f} hrs", f"{m_peak - b_peak:.2f} hrs", delta_color="inverse")
 
-        c1.metric(
-            "Patients Served",
-            metrics["marl_patients"],
-            f"+{metrics['marl_patients'] - metrics['baseline_patients']} vs Baseline"
-        )
-
-        c2.metric(
-            "Avg Waiting Time",
-            f"{metrics['marl_avg_wait']:.2f}",
-            f"-{metrics['baseline_avg_wait'] - metrics['marl_avg_wait']:.2f}"
-        )
-
-        c3.metric(
-            "Peak Waiting Time",
-            f"{metrics['marl_peak_wait']:.2f}",
-            f"-{metrics['baseline_peak_wait'] - metrics['marl_peak_wait']:.2f}"
-        )
-
-        st.subheader("📋 Before vs After (Rule-based vs MARL)")
-
+        # 3. Final Comparison Table
         comparison_df = pd.DataFrame({
-            "Metric": [
-                "Patients Served",
-                "Average Waiting Time",
-                "Peak Waiting Time"
-            ],
-            "Rule-based (Before MARL)": [
-                metrics["baseline_patients"],
-                round(metrics["baseline_avg_wait"], 2),
-                round(metrics["baseline_peak_wait"], 2)
-            ],
-            "MARL (After)": [
-                metrics["marl_patients"],
-                round(metrics["marl_avg_wait"], 2),
-                round(metrics["marl_peak_wait"], 2)
-            ]
+            "Metric": ["Patients Served", "Average Waiting Time (hrs)", "Peak Waiting Time (hrs)"],
+            "Rule-based (Baseline)": [int(b_served), round(b_avg, 2), round(b_peak, 2)],
+            "MARL (Trained Agent)": [int(m_served), round(m_avg, 2), round(m_peak, 2)]
         })
-
         st.table(comparison_df)
-
-        st.subheader("📈 Patients Served Over Time")
-
-        fig_ps, ax_ps = plt.subplots(figsize=(7, 3))
-        ax_ps.plot(df["episode"], df["episode"] * 0.75, label="Rule-based (Before MARL)")
-        ax_ps.plot(df["episode"], df["episode"], label="MARL (After)")
-        ax_ps.set_xlabel("Episode")
-        ax_ps.set_ylabel("Cumulative Patients Served")
-        ax_ps.legend()
-        st.pyplot(fig_ps)
-
-        st.subheader("⏱️ Waiting Time Reduction")
-
-        fig_wt, ax_wt = plt.subplots(figsize=(7, 3))
-        ax_wt.plot(df["episode"], df["waiting_time"] * 8, label="Rule-based (Before MARL)")
-        ax_wt.plot(df["episode"], df["waiting_time"], label="MARL (After)")
-        ax_wt.set_xlabel("Episode")
-        ax_wt.set_ylabel("Waiting Time")
-        ax_wt.legend()
-        st.pyplot(fig_wt)
-
-        st.success("""
-        **Result Summary**
-
-        The MARL-based approach:
-        - Serves more patients within the same time horizon
-        - Significantly reduces average and peak waiting time
-        - Prevents resource saturation seen in rule-based systems
-
-        This confirms that **learning-based coordination outperforms static rule-based hospital management**.
-        """)
-
-        # end changes [Gajendra]
-        st.subheader("Training Reward Curve")
-        fig1, ax1 = plt.subplots(figsize=(7, 3))
-       
-        ax1.set_xlabel("Episode")
-        ax1.set_ylabel("Reward")
-        ax1.set_title("Reward Curve")
-        ax1.plot(df["episode"], df["reward"])
-        st.pyplot(fig1)
-
-        st.subheader("ICU Utilization Over Training")
-        fig2, ax2 = plt.subplots(figsize=(7, 3))
-        ax2.plot(df["episode"], df["icu_util"])
-        ax2.set_xlabel("Episode")
-        ax2.set_ylabel("ICU Utilisation")
-        st.pyplot(fig2)
-
-        st.subheader("OT Utilization Over Training")
-        fig3, ax3 = plt.subplots(figsize=(7, 3))
-        ax3.set_xlabel("Episode")
-        ax3.set_ylabel("OT Utilisation")
-        ax3.plot(df["episode"], df["ot_util"])
-        st.pyplot(fig3)
-
-        st.subheader("Waiting Time Trend")
-        fig4, ax4 = plt.subplots(figsize=(7, 3))
-        ax4.plot(df["episode"], df["waiting_time"])
-        ax4.set_xlabel("Episode")
-        ax4.set_ylabel("OT Utilisation")
-        st.pyplot(fig4)
-
-        st.header("Baseline vs MARL Performance Comparison")
-
-        # Create time axis from episode count
-        time = df["episode"]
-
-        # Convert scalar utilization into time-series for visualization
-        baseline_icu_series = [metrics["baseline_icu_util"]] * len(time)
-        marl_icu_series = df["icu_util"]
-
-        baseline_ot_series = [metrics["baseline_ot_util"]] * len(time)
-        marl_ot_series = df["ot_util"]
-
-        # -------------------------
-        # ICU Utilization Comparison
-        # -------------------------
-        st.subheader("ICU Utilization: Rule-Based vs MARL")
-
-        fig_icu = plot_utilization_comparison(
-            time,
-            baseline_icu_series,
-            marl_icu_series,
-            "ICU Utilization Comparison",
-            "Utilization Ratio"
-        )
-        st.pyplot(fig_icu)
-
-        # -------------------------
-        # OT Utilization Comparison
-        # -------------------------
-        st.subheader("OT Utilization: Rule-Based vs MARL")
-
-        fig_ot = plot_utilization_comparison(
-            time,
-            baseline_ot_series,
-            marl_ot_series,
-            "OT Utilization Comparison",
-            "Utilization Ratio"
-        )
-        #st.pyplot(fig_ot)
-st.markdown("---")
+        
+        # 4. Progress Visualization
+        st.subheader("📈 Training Progress")
+        st.line_chart(df_marl.set_index('episode')[['reward', 'waiting_time']])
+        
+    else:
+        st.error("Baseline data not found. Run Tab 1 first.")
 
 
 
@@ -476,33 +379,35 @@ with tab5:
         st.error("Industry data file `data/industry_data.csv` not found. Please create it to see graphs.")
 
 st.markdown("---")
-# Add this to the sidebar section
-st.sidebar.header("🕹️ What-If Scenario Controller")
-surge_val = st.sidebar.slider("Patient Surge Factor (%)", 0, 100, 0)
-surge_factor = 1 + (surge_val / 100)
 
-if st.sidebar.button("📊 Generate Resilience Chart"):
-    if model is not None:
-        st.subheader("🛡️ System Resilience: PPO vs. Rule-Based Baseline")
-        
+st.header("📈 PPO Optimization: Minimum Wait & Maximum Served")
+
+# MODIFIED BY AI ASSISTANT [2026-01-25]
+# TASK: Fix TypeError by selecting scalar values instead of Series
+
+if os.path.exists("simulation_performance.csv") and os.path.exists("experiments/ppo_results.csv"):
+    df_b = pd.read_csv("simulation_performance.csv")
+    df_p = pd.read_csv("experiments/ppo_results.csv")
     
-        # Assuming 'model' is your loaded PPO agent
-        surge_levels, ppo_waits, baseline_waits = run_resilience_test(model, surge_factor)
-        
-        fig_res, ax_res = plt.subplots()
-        # Convert factors back to percentages for the X-axis
-        display_x = [(f - 1) * 100 for f in surge_levels]
-        
-        ax_res.plot(display_x, baseline_waits, 'r--o', label="Rule-Based (Static)")
-        ax_res.plot(display_x, ppo_waits, 'g-s', label="PPO (Adaptive)")
-        
-        ax_res.set_title(f"System Stress Test at {surge_val}% Surge")
-        ax_res.set_xlabel("Surge Intensity (%)")
-        ax_res.set_ylabel("Hospital Pressure Metric")
-        ax_res.legend()
-        st.pyplot(fig_res)
-        
-        st.success("Analysis Complete: PPO maintains stability for +35% more surge than the baseline.")
-    else:
-        st.error("Cannot run analysis without a trained model file.")
-
+    # 1. Baseline Metrics (Scalars)
+    b_wait = df_b.loc[df_b['Metric'] == 'Average Waiting Time', 'Value'].values[0]
+    b_served = df_b.loc[df_b['Metric'] == 'Total Patients Served', 'Value'].values[0]
+    
+    # 2. FIX: Pull single values for PPO
+    # We use the average of the last 50 episodes for a stable Wait Time metric
+    p_wait = df_p['waiting_time'].tail(50).mean()
+    
+    # We use the very last episode for the Throughput metric
+    p_served = df_p['patients_served'].iloc[-1]
+    
+    col1, col2 = st.columns(2)
+    
+    # Now that p_wait is a single number, the f-string formatting will work
+    col1.metric("Wait Time (Goal: Min)", f"{p_wait:.2f} hrs", 
+                delta=f"{p_wait - b_wait:.2f} hrs", delta_color="inverse")
+    
+    # Now that p_served is a single number, int() will work
+    col2.metric("Patients Served (Goal: Max)", int(p_served), 
+                delta=int(p_served - b_served))
+else:
+    st.error("Missing data. Run Tab 1 and Tab 4 first.")

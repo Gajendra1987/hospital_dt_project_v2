@@ -1,5 +1,5 @@
-from hospital_dt.env.hospital_env import HospitalDT
-from hospital_dt.agents.rule_based_agents import icu_agent_rule, ot_agent_rule, staff_agent_rule, merge_actions
+from hospital_env import HospitalDT
+from rule_based_agents import icu_agent_rule, ot_agent_rule, staff_agent_rule, merge_actions
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -67,20 +67,29 @@ def run_baseline(seed=1, duration=48):
 
 def save_simulation_results(dt, filename="simulation_performance.csv"):
     # 1. Extract raw patient data from the DT object
-    # Assuming 'patients' is a list of objects with arrival and admission attributes
     patient_data = []
-    for p in dt.all_patients:
-        if p.admission_time is not None:
-            wait_time = p.admission_time - p.arrival_time
+    
+    for p in dt.patients:
+        # Determine admission based on your hospital_env.py attributes
+        admission_time = p.entered_icu if p.entered_icu is not None else p.entered_ot
+        
+        if admission_time is not None:
+            # Calculate wait for THIS patient only
+            current_wait = admission_time - p.arrival
+            
             patient_data.append({
                 'patient_id': p.id,
-                'wait_time': wait_time,
+                'wait_time': current_wait, # Store the scalar number
                 'served': True
             })
     
+    if not patient_data:
+        print("No patients were served during this simulation run.")
+        return
+
+    # 2. Create DataFrame and Calculate Aggregates
     df_patients = pd.DataFrame(patient_data)
     
-    # 2. Calculate Aggregates
     avg_wait = df_patients['wait_time'].mean()
     peak_wait = df_patients['wait_time'].max()
     total_served = len(df_patients)
@@ -88,13 +97,13 @@ def save_simulation_results(dt, filename="simulation_performance.csv"):
     # 3. Create Summary DataFrame
     summary_data = {
         'Metric': ['Average Waiting Time', 'Peak Waiting Time', 'Total Patients Served'],
-        'Value': [avg_wait, peak_wait, total_served]
+        'Value': [round(avg_wait, 2), round(peak_wait, 2), total_served]
     }
     df_summary = pd.DataFrame(summary_data)
     
     # 4. Save to CSV
     df_summary.to_csv(filename, index=False)
-    print(f"Metrics saved to {filename}")   
+    print(f"Metrics saved to {filename}")
 
 if __name__ == '__main__':
     # Execute the simulation and print a confirmation message.
