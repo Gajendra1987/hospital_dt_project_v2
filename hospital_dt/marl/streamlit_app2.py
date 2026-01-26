@@ -11,7 +11,7 @@ import numpy as np
 
 st.set_page_config(page_title="Hospital Digital Twin Dashboard", layout="wide")
 
-st.title("🏥 Hospital Digital Twin – Simulation & MARL Dashboard")
+st.title("🏥 Hospital Digital Twin – Simulation | MARL | MAPPO Dashboard")
 
 # --------------------------------------------------------
 # Helper: compute_baseline_vs_marl_metrics (Existing)
@@ -197,11 +197,6 @@ with tab1:
     # Display the existing occupancy plot
     st.image('hospital_dt_baseline_plot_v2.png', caption="Baseline Resource Utilization")
 
-
-# MODIFIED BY AI ASSISTANT [2026-01-25]
-# TASK: Fix Tab 3 to correctly compare Baseline CSV with Training Log CSV
-
-# MODIFIED BY AI ASSISTANT [2026-01-25]
 # TASK: Align Tab 3 (Q-Learning) with corrected throughput and wait time metrics
 with tab2:
     st.header("🤖 MARL Training Comparison (Q-learning)")
@@ -258,8 +253,6 @@ with tab2:
             
         else:
             st.error("Baseline data not found. Run Tab 1 first.")
-
-
 
 
 
@@ -376,7 +369,7 @@ with tab4:
 
     st.header("📈 PPO Optimization: Minimum Wait & Maximum Served")
 
-    # MODIFIED BY AI ASSISTANT [2026-01-25]
+    
     # TASK: Fix TypeError by selecting scalar values instead of Series
 
     if os.path.exists("simulation_performance.csv") and os.path.exists("experiments/ppo_results.csv"):
@@ -408,12 +401,7 @@ with tab4:
 
     # streamlit_app2.py
 
-    st.subheader("🕵️ XAI: Decision Reasoning Analysis")
-
-        # MODIFIED BY AI ASSISTANT [2026-01-25]
-    # TASK: Add Visual and Tabular XAI Analysis to Dashboard
-
-    # MODIFIED BY AI ASSISTANT [2026-01-25]
+    
 # TASK: Finalized XAI Dashboard with Relative Thresholding and Data Cleaning
 
     if 'xai_score' in df_p.columns:
@@ -427,7 +415,7 @@ with tab4:
         xai_median = df_p['xai_score'].median()
 
         st.divider()
-        st.subheader("🕵️ Deep XAI Analysis: Policy Transparency")
+        st.subheader("🕵️ Deep XAI Reasoning Analysis: Policy Transparency")
 
         # --- VISUAL FORMAT: Decision Confidence Trend ---
         st.write("**Visual: Agent Decision Confidence over Time**")
